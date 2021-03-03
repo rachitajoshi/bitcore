@@ -1,3 +1,4 @@
+import * as CWC from 'crypto-wallet-core';
 import _ from 'lodash';
 
 const $ = require('preconditions').singleton();
@@ -7,14 +8,15 @@ const secp256k1 = require('secp256k1');
 const Bitcore = require('bitcore-lib');
 const Bitcore_ = {
   btc: Bitcore,
-  bch: require('bitcore-lib-cash')
+  bch: require('bitcore-lib-cash'),
+  doge: require('bitcore-lib-doge')
 };
 
 export class Utils {
   static getMissingFields(obj, args) {
     args = [].concat(args);
     if (!_.isObject(obj)) return args;
-    const missing = _.filter(args, (arg) => {
+    const missing = _.filter(args, arg => {
       return !obj.hasOwnProperty(arg);
     });
     return missing;
@@ -34,7 +36,7 @@ export class Utils {
    * the hash is calculated there? */
   static hashMessage(text, noReverse) {
     $.checkArgument(text);
-    const buf = new Buffer(text);
+    const buf = Buffer.from(text);
     let ret = crypto.Hash.sha256sha256(buf);
     if (!noReverse) {
       ret = new bitcore.encoding.BufferReader(ret).readReverse();
@@ -42,10 +44,11 @@ export class Utils {
     return ret;
   }
 
-  static verifyMessage(text, signature, publicKey) {
-    $.checkArgument(text);
+  static verifyMessage(message, signature, publicKey) {
+    $.checkArgument(message);
 
-    const hash = Utils.hashMessage(text, true);
+    const flattenedMessage = _.isArray(message) ? _.join(message) : message;
+    const hash = Utils.hashMessage(flattenedMessage, true);
 
     const sig = this._tryImportSignature(signature);
     if (!sig) {
@@ -64,7 +67,7 @@ export class Utils {
     let publicKeyBuffer = publicKey;
     try {
       if (!Buffer.isBuffer(publicKey)) {
-        publicKeyBuffer = new Buffer(publicKey, 'hex');
+        publicKeyBuffer = Buffer.from(publicKey, 'hex');
       }
       return publicKeyBuffer;
     } catch (e) {
@@ -76,7 +79,7 @@ export class Utils {
     try {
       let signatureBuffer = signature;
       if (!Buffer.isBuffer(signature)) {
-        signatureBuffer = new Buffer(signature, 'hex');
+        signatureBuffer = Buffer.from(signature, 'hex');
       }
       return secp256k1.signatureImport(signatureBuffer);
     } catch (e) {
@@ -93,33 +96,14 @@ export class Utils {
   }
 
   static formatAmount(satoshis, unit, opts) {
-    const UNITS = {
-      btc: {
-        toSatoshis: 100000000,
-        maxDecimals: 6,
-        minDecimals: 2
-      },
-      bit: {
-        toSatoshis: 100,
-        maxDecimals: 0,
-        minDecimals: 0
-      },
-      sat: {
-        toSatoshis: 1,
-        maxDecimals: 0,
-        minDecimals: 0
-      },
-      bch: {
-        toSatoshis: 100000000,
-        maxDecimals: 6,
-        minDecimals: 2
-      },
-      eth: {
-        toSatoshis: 1e18,
-        maxDecimals: 6,
-        minDecimals: 2
-      },
-    };
+    const UNITS = Object.entries(CWC.Constants.UNITS).reduce((units, [currency, currencyConfig]) => {
+      units[currency] = {
+        toSatoshis: currencyConfig.toSatoshis,
+        maxDecimals: currencyConfig.short.maxDecimals,
+        minDecimals: currencyConfig.short.minDecimals
+      };
+      return units;
+    }, {} as { [currency: string]: { toSatoshis: number; maxDecimals: number; minDecimals: number } });
 
     $.shouldBeNumber(satoshis);
     $.checkArgument(_.includes(_.keys(UNITS), unit));
@@ -141,14 +125,12 @@ export class Utils {
 
     opts = opts || {};
 
+    if (!UNITS[unit]) {
+      return Number(satoshis).toLocaleString();
+    }
     const u = _.assign(UNITS[unit], opts);
     const amount = (satoshis / u.toSatoshis).toFixed(u.maxDecimals);
-    return addSeparators(
-      amount,
-      opts.thousandsSeparator || ',',
-      opts.decimalSeparator || '.',
-      u.minDecimals
-    );
+    return addSeparators(amount, opts.thousandsSeparator || ',', opts.decimalSeparator || '.', u.minDecimals);
   }
 
   static formatAmountInBtc(amount) {
@@ -162,7 +144,7 @@ export class Utils {
 
   static formatUtxos(utxos) {
     if (_.isEmpty(utxos)) return 'none';
-    return _.map([].concat(utxos), (i) => {
+    return _.map([].concat(utxos), i => {
       const amount = Utils.formatAmountInBtc(i.satoshis);
       const confirmations = i.confirmations ? i.confirmations + 'c' : 'u';
       return amount + '/' + confirmations;
@@ -234,6 +216,16 @@ export class Utils {
     return v;
   }
 
+  static getIpFromReq(req): string {
+    if (req.headers) {
+      if (req.headers['x-forwarded-for']) return req.headers['x-forwarded-for'].split(',')[0];
+      if (req.headers['x-real-ip']) return req.headers['x-real-ip'].split(',')[0];
+    }
+    if (req.ip) return req.ip;
+    if (req.connection && req.connection.remoteAddress) return req.connection.remoteAddress;
+    return '';
+  }
+
   static checkValueInCollection(value, collection) {
     if (!value || !_.isString(value)) return false;
     return _.includes(_.values(collection), value);
@@ -248,7 +240,12 @@ export class Utils {
         new Bitcore_['bch'].Address(address);
         return 'bch';
       } catch (e) {
-        return;
+        try {
+          new Bitcore_['doge'].Address(address);
+          return 'doge';
+        } catch (e) {
+          return;
+        }
       }
     }
   }

@@ -1,7 +1,9 @@
 import { BCHTxProvider } from './bch';
 import { BTCTxProvider } from './btc';
+import { DOGETxProvider } from './doge';
 import { ERC20TxProvider } from './erc20';
 import { ETHTxProvider } from './eth';
+import { ETHMULTISIGTxProvider } from './eth-multisig';
 import { XRPTxProvider } from './xrp';
 
 const providers = {
@@ -9,7 +11,9 @@ const providers = {
   BCH: new BCHTxProvider(),
   ETH: new ETHTxProvider(),
   ERC20: new ERC20TxProvider(),
-  XRP: new XRPTxProvider()
+  ETHMULTISIG: new ETHMULTISIGTxProvider(),
+  XRP: new XRPTxProvider(),
+  DOGE: new DOGETxProvider()
 };
 
 export class TransactionsProxy {
@@ -36,7 +40,6 @@ export class TransactionsProxy {
   getHash(params) {
     return this.get(params).getHash(params);
   }
-
 }
 
 export default new TransactionsProxy();

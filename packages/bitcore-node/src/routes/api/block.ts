@@ -1,9 +1,8 @@
 import { Request, Response } from 'express';
-import { ChainStateProvider } from '../../providers/chain-state';
-import { SetCache, CacheTimes, Confirmations } from '../middleware';
-import { BitcoinBlockStorage } from '../../models/block';
+import { CoinStorage, ICoin } from '../../models/coin';
 import { TransactionStorage } from '../../models/transaction';
-import { CoinStorage } from '../../models/coin';
+import { ChainStateProvider } from '../../providers/chain-state';
+import { CacheTimes, Confirmations, SetCache } from '../middleware';
 
 const router = require('express').Router({ mergeParams: true });
 
@@ -31,7 +30,7 @@ router.get('/', async function(req: Request, res: Response) {
 router.get('/tip', async function(req: Request, res: Response) {
   let { chain, network } = req.params;
   try {
-    let tip = await ChainStateProvider.getBlock({ chain, network });
+    let tip = await ChainStateProvider.getLocalTip({ chain, network });
     return res.json(tip);
   } catch (err) {
     console.error(err);
@@ -56,7 +55,7 @@ router.get('/:blockId', async function(req: Request, res: Response) {
   }
 });
 
-//return all { txids, inputs, ouputs} for a blockHash paginated at max 500 per page, to limit reqs and overload
+// return all { txids, inputs, ouputs} for a blockHash paginated at max 500 per page, to limit reqs and overload
 router.get('/:blockHash/coins/:limit/:pgnum', async function(req: Request, res: Response) {
   let { chain, network, blockHash, limit, pgnum } = req.params;
 
@@ -118,7 +117,8 @@ router.get('/:blockHash/coins/:limit/:pgnum', async function(req: Request, res: 
       next = `/block/${blockHash}/coins/${maxLimit}/${nxtPageNum}`;
     }
 
-    return res.json({ txids, inputs, outputs, previous, next });
+    const sanitize = (coins: Array<ICoin>) => coins.map(c => CoinStorage._apiTransform(c, { object: true }));
+    return res.json({ txids, inputs: sanitize(inputs), outputs: sanitize(outputs), previous, next });
   } catch (err) {
     return res.status(500).send(err);
   }
@@ -127,16 +127,7 @@ router.get('/:blockHash/coins/:limit/:pgnum', async function(req: Request, res: 
 router.get('/before-time/:time', async function(req: Request, res: Response) {
   let { time, chain, network } = req.params;
   try {
-    const [block] = await BitcoinBlockStorage.collection
-      .find({
-        chain,
-        network,
-        timeNormalized: { $lte: new Date(time) }
-      })
-      .limit(1)
-      .sort({ timeNormalized: -1 })
-      .toArray();
-
+    const block = await ChainStateProvider.getBlockBeforeTime({ chain, network, time });
     if (!block) {
       return res.status(404).send('block not found');
     }
@@ -151,6 +142,6 @@ router.get('/before-time/:time', async function(req: Request, res: Response) {
 });
 
 module.exports = {
-  router: router,
+  router,
   path: '/block'
 };

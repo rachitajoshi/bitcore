@@ -28,7 +28,7 @@ export class TransactionDetailsComponent implements OnInit {
   public showCoins = true;
   @Input()
   public chainNetwork: ChainNetwork;
-  public confirmations: number;
+  public confirmations;
   @Input()
   public page: string;
 
@@ -46,8 +46,9 @@ export class TransactionDetailsComponent implements OnInit {
   ) {}
 
   public ngOnInit(): void {
+    this.getConfirmations();
     if (this.chainNetwork.chain !== 'ETH') {
-      if (this.page === 'transaction') {
+      if (!this.tx.vin || !this.tx.vin.length) {
         this.getCoins();
       }
     }
@@ -61,13 +62,15 @@ export class TransactionDetailsComponent implements OnInit {
         this.tx.vout = data.outputs;
         this.tx.fee = this.txProvider.getFee(this.tx);
         this.tx.isRBF = _.some(data.inputs, input => {
-          return input.sequenceNumber && input.sequenceNumber < this.DEFAULT_RBF_SEQNUMBER - 1;
+          return (
+            input.sequenceNumber &&
+            input.sequenceNumber < this.DEFAULT_RBF_SEQNUMBER - 1
+          );
         });
         this.tx.hasUnconfirmedInputs = _.some(data.inputs, input => {
           return input.mintHeight < 0;
         });
         this.tx.valueOut = data.outputs.reduce((a, b) => a + b.value, 0);
-        this.getConfirmations();
       });
   }
 

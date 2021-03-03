@@ -1,9 +1,10 @@
 import _ from 'lodash';
+import { ChainService } from '../chain/index';
+import logger from '../logger';
 import { Address } from './address';
 import { AddressManager } from './addressmanager';
 import { Copayer } from './copayer';
 
-const log = require('npmlog');
 const $ = require('preconditions').singleton();
 const Uuid = require('uuid');
 const config = require('../../config');
@@ -14,7 +15,9 @@ const Constants = Common.Constants,
 const Bitcore = {
   btc: require('bitcore-lib'),
   bch: require('bitcore-lib-cash'),
-  eth: require('bitcore-lib')
+  eth: require('bitcore-lib'),
+  xrp: require('bitcore-lib'),
+  doge: require('bitcore-lib-doge')
 };
 
 export interface IWallet {
@@ -26,7 +29,7 @@ export interface IWallet {
   n: number;
   singleAddress: boolean;
   status: string;
-  publicKeyRing: Array<{ xPubKey: string, requestPubKey: string }>;
+  publicKeyRing: Array<{ xPubKey: string; requestPubKey: string }>;
   addressIndex: number;
   copayers: string[];
   pubKey: string;
@@ -53,7 +56,7 @@ export class Wallet {
   n: number;
   singleAddress: boolean;
   status: string;
-  publicKeyRing: Array<{ xPubKey: string, requestPubKey: string }>;
+  publicKeyRing: Array<{ xPubKey: string; requestPubKey: string }>;
   addressIndex: number;
   copayers: Array<Copayer>;
   pubKey: string;
@@ -81,9 +84,7 @@ export class Wallet {
     $.shouldBeNumber(opts.m);
     $.shouldBeNumber(opts.n);
     $.checkArgument(Utils.checkValueInCollection(opts.coin, Constants.COINS));
-    $.checkArgument(
-      Utils.checkValueInCollection(opts.network, Constants.NETWORKS)
-    );
+    $.checkArgument(Utils.checkValueInCollection(opts.network, Constants.NETWORKS));
 
     x.version = '1.0.0';
     x.createdOn = Math.floor(Date.now() / 1000);
@@ -99,14 +100,13 @@ export class Wallet {
     x.pubKey = opts.pubKey;
     x.coin = opts.coin;
     x.network = opts.network;
-    x.derivationStrategy =
-      opts.derivationStrategy || Constants.DERIVATION_STRATEGIES.BIP45;
+    x.derivationStrategy = opts.derivationStrategy || Constants.DERIVATION_STRATEGIES.BIP45;
     x.addressType = opts.addressType || Constants.SCRIPT_TYPES.P2SH;
 
     x.addressManager = AddressManager.create({
       derivationStrategy: x.derivationStrategy
     });
-    x.usePurpose48  = opts.usePurpose48;
+    x.usePurpose48 = opts.usePurpose48;
 
     x.scanStatus = null;
 
@@ -116,11 +116,7 @@ export class Wallet {
     x.beAuthPublicKey2 = null;
 
     // x.nativeCashAddr opts is only for testing
-    x.nativeCashAddr = _.isUndefined(opts.nativeCashAddr)
-      ? x.coin == 'bch'
-        ? true
-        : null
-      : opts.nativeCashAddr;
+    x.nativeCashAddr = _.isUndefined(opts.nativeCashAddr) ? (x.coin == 'bch' ? true : null) : opts.nativeCashAddr;
 
     return x;
   }
@@ -140,7 +136,7 @@ export class Wallet {
     x.singleAddress = !!obj.singleAddress;
     x.status = obj.status;
     x.publicKeyRing = obj.publicKeyRing;
-    x.copayers = _.map(obj.copayers, (copayer) => {
+    x.copayers = _.map(obj.copayers, copayer => {
       return Copayer.fromObj(copayer);
     });
     x.pubKey = obj.pubKey;
@@ -149,8 +145,7 @@ export class Wallet {
     if (!x.network) {
       x.network = obj.isTestnet ? 'testnet' : 'livenet';
     }
-    x.derivationStrategy =
-      obj.derivationStrategy || Constants.DERIVATION_STRATEGIES.BIP45;
+    x.derivationStrategy = obj.derivationStrategy || Constants.DERIVATION_STRATEGIES.BIP45;
     x.addressType = obj.addressType || Constants.SCRIPT_TYPES.P2SH;
     x.addressManager = AddressManager.fromObj(obj.addressManager);
     x.scanStatus = obj.scanStatus;
@@ -181,7 +176,7 @@ export class Wallet {
   }
 
   static verifyCopayerLimits(m, n) {
-    return n >= 1 && n <= 15 && (m >= 1 && m <= n);
+    return n >= 1 && n <= 15 && m >= 1 && m <= n;
   }
 
   isShared() {
@@ -193,9 +188,10 @@ export class Wallet {
   }
 
   updateBEKeys() {
-    $.checkState(this.isComplete());
+    $.checkState(this.isComplete(), 'Failed state: wallet incomplete at <updateBEKeys()>');
 
-    const bitcore = Bitcore[this.coin];
+    const chain = ChainService.getChain(this.coin).toLowerCase();
+    const bitcore = Bitcore[chain];
     const salt = config.BE_KEY_SALT || Defaults.BE_KEY_SALT;
 
     var seed =
@@ -205,7 +201,7 @@ export class Wallet {
       this.network +
       this.coin +
       salt;
-    seed = bitcore.crypto.Hash.sha256(new Buffer(seed));
+    seed = bitcore.crypto.Hash.sha256(Buffer.from(seed));
     const priv = bitcore.PrivateKey(seed, this.network);
 
     this.beAuthPrivateKey2 = priv.toString();
@@ -214,13 +210,13 @@ export class Wallet {
   }
 
   _updatePublicKeyRing() {
-    this.publicKeyRing = _.map(this.copayers, (copayer) => {
+    this.publicKeyRing = _.map(this.copayers, copayer => {
       return _.pick(copayer, ['xPubKey', 'requestPubKey']);
     });
   }
 
   addCopayer(copayer) {
-    $.checkState(copayer.coin == this.coin);
+    $.checkState(copayer.coin == this.coin, 'Failed state: copayer.coin not equal to this.coin at <addCopayer()>');
 
     this.copayers.push(copayer);
     if (this.copayers.length < this.n) return;
@@ -229,14 +225,11 @@ export class Wallet {
     this._updatePublicKeyRing();
   }
 
-  addCopayerRequestKey(
-    copayerId,
-    requestPubKey,
-    signature,
-    restrictions,
-    name
-  ) {
-    $.checkState(this.copayers.length == this.n);
+  addCopayerRequestKey(copayerId, requestPubKey, signature, restrictions, name) {
+    $.checkState(
+      this.copayers.length == this.n,
+      'Failed state: this.copayers.length == this.n at addCopayerRequestKey()'
+    );
 
     const c: any = this.getCopayer(copayerId);
 
@@ -251,7 +244,7 @@ export class Wallet {
   }
 
   getCopayer(copayerId): Copayer {
-    return this.copayers.find((c) => c.id == copayerId);
+    return this.copayers.find(c => c.id == copayerId);
   }
 
   isComplete() {
@@ -263,10 +256,10 @@ export class Wallet {
   }
 
   createAddress(isChange, step) {
-    $.checkState(this.isComplete());
+    $.checkState(this.isComplete(), 'Failed state: this.isComplete() at <createAddress()>');
 
     const path = this.addressManager.getNewAddressPath(isChange, step);
-    log.verbose('Deriving addr:' + path);
+    logger.debug('Deriving addr:' + path);
     const address = Address.derive(
       this.id,
       this.addressType,
@@ -283,7 +276,7 @@ export class Wallet {
 
   /// Only for power scan
   getSkippedAddress() {
-    $.checkState(this.isComplete());
+    $.checkState(this.isComplete(), 'Failed state: this.isComplete() at <getSkipeedAddress()>');
 
     const next = this.addressManager.getNextSkippedPath();
     if (!next) return;

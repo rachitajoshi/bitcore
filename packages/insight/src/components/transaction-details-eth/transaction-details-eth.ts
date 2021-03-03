@@ -1,4 +1,4 @@
-import { Component, Input } from '@angular/core';
+import { Component, Input, OnInit } from '@angular/core';
 import { ApiProvider, ChainNetwork } from '../../providers/api/api';
 import { BlocksProvider } from '../../providers/blocks/blocks';
 import { CurrencyProvider } from '../../providers/currency/currency';
@@ -15,13 +15,14 @@ import { TxsProvider } from '../../providers/transactions/transactions';
   selector: 'transaction-details-eth',
   templateUrl: 'transaction-details-eth.html'
 })
-export class TransactionDetailsEthComponent {
+export class TransactionDetailsEthComponent implements OnInit {
   @Input()
   public tx: any = {};
   @Input()
   public showCoins = false;
   @Input()
   public chainNetwork: ChainNetwork;
+
   public confirmations: number;
 
   constructor(
@@ -31,6 +32,14 @@ export class TransactionDetailsEthComponent {
     public redirProvider: RedirProvider,
     public blocksProvider: BlocksProvider
   ) {}
+
+  public ngOnInit(): void {
+    this.txProvider
+      .getConfirmations(this.tx.blockheight, this.chainNetwork)
+      .subscribe(confirmations => {
+        this.tx.confirmations = confirmations;
+      });
+  }
 
   public goToTx(txId: string, vout?: number, fromVout?: boolean): void {
     this.redirProvider.redir('transaction', {

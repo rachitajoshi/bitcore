@@ -11,9 +11,15 @@ ion-item.item-md {
 
     .logo {
       width: 25px;
+      height: 25px;
     }
   }
 }
+
+.secondary {
+  filter: grayscale(100%);
+}
+
 ion-item {
   ion-label {
   cursor: pointer;
