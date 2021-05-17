@@ -1,15 +1,10 @@
-import { Component, Input, NgZone, OnDestroy, OnInit } from '@angular/core';
-import { Subscription } from 'rxjs';
-import { ChainNetwork } from '../../providers/api/api';
-import {
-  ApiEthBlock,
-  ApiUtxoCoinBlock,
-  AppBlock,
-  BlocksProvider
-} from '../../providers/blocks/blocks';
-import { CurrencyProvider } from '../../providers/currency/currency';
-import { DefaultProvider } from '../../providers/default/default';
-import { RedirProvider } from '../../providers/redir/redir';
+import {Component, Input, NgZone, OnDestroy, OnInit} from '@angular/core';
+import {Subscription} from 'rxjs';
+import {ChainNetwork} from '../../providers/api/api';
+import {ApiEthBlock, ApiUtxoCoinBlock, AppBlock, BlocksProvider} from '../../providers/blocks/blocks';
+import {CurrencyProvider} from '../../providers/currency/currency';
+import {DefaultProvider} from '../../providers/default/default';
+import {RedirProvider} from '../../providers/redir/redir';
 
 @Component({
   selector: 'latest-blocks',
@@ -61,7 +56,7 @@ export class LatestBlocksComponent implements OnInit, OnDestroy {
         .getBlocks(this.chainNetwork, this.numBlocks)
         .subscribe(
           response => {
-            const blocks = response.map(
+            this.blocks = response.map(
               (block: ApiEthBlock & ApiUtxoCoinBlock) => {
                 if (
                   this.chainNetwork.chain === 'BTC' ||
@@ -75,9 +70,8 @@ export class LatestBlocksComponent implements OnInit, OnDestroy {
                 }
               }
             );
-            this.blocks = blocks;
             this.loading = false;
-            if (this.blocks[this.blocks.length - 1].height < this.numBlocks) {
+            if (this.blocks[this.blocks.length - 1].height && this.blocks[this.blocks.length - 1].height < this.numBlocks) {
               this.isHomePage = false;
             }
           },

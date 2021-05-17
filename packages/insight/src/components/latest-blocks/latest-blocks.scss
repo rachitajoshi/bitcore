@@ -3,6 +3,7 @@
 
   background: #fff;
   border-radius: .9rem;
+  padding: 0 20px;
   @media (max-width: map-get($grid-breakpoints, xs)) {
     padding: 0;
 
@@ -24,14 +25,8 @@
   }
 
   ion-col, ion-col a {
-    text-align: center;
-    font-size: 11px;
-
-    @media (min-width: map-get($grid-breakpoints, lg)) {
-
-      font-size: 14px;
-
-    }
+    text-align: left;
+    font-size: 10px;
   }
 
 }

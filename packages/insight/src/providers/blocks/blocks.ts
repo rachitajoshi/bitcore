@@ -1,9 +1,17 @@
-import { HttpClient } from '@angular/common/http';
+import {HttpClient, HttpErrorResponse} from '@angular/common/http';
+import { ToastController } from 'ionic-angular';
+
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { merge, shareReplay } from 'rxjs/operators';
-import { ApiProvider, ChainNetwork } from '../../providers/api/api';
-import { CurrencyProvider } from '../../providers/currency/currency';
+import { ApiProvider, ChainNetwork } from '../api/api';
+import { CurrencyProvider } from '../currency/currency';
+
+import 'rxjs/add/operator/catch';
+import 'rxjs/add/operator/retry';
+
+import {of} from "rxjs/observable/of";
+
 
 export interface ApiBlock {
   height: number;
@@ -70,14 +78,14 @@ export interface AppEthBlock extends AppBlock {
 
 @Injectable()
 export class BlocksProvider {
-  public chainNetworkTipValues;
   public currentChainNetwork;
   public tipValue;
 
   constructor(
     public httpClient: HttpClient,
     public currency: CurrencyProvider,
-    private api: ApiProvider
+    private api: ApiProvider,
+    public toasty: ToastController
   ) {}
 
   public toEthAppBlock(block: ApiEthBlock): AppEthBlock {
@@ -153,7 +161,35 @@ export class BlocksProvider {
     numBlocks: number = 10
   ): Observable<ApiEthBlock[] & ApiUtxoCoinBlock[]> {
     const url = `${this.api.getUrl(chainNetwork)}/block?limit=${numBlocks}`;
-    return this.httpClient.get<ApiEthBlock[] & ApiUtxoCoinBlock[]>(url);
+    return this.httpClient.get<ApiEthBlock[] & ApiUtxoCoinBlock[]>(url)
+      .retry(3) // optionally add the retry
+      .catch((err: HttpErrorResponse) => {
+        if (err.error instanceof Error) {
+          // A client-side or network error occurred. Handle it accordingly.
+          // console.error('An error occurred:', err.error.message);
+        } else {
+          // The backend returned an unsuccessful response code.
+          // The response body may contain clues as to what went wrong,
+const t = this.showToast();
+// tslint:disable-next-line:no-console
+console.log(t);
+
+        }
+
+        // ...optionally return a default fallback value so app can continue (pick one)
+        // which could be a default value
+        // return Observable.of<any>({my: "default value..."});
+        // or simply an empty observable
+        return of<[]>([]);
+      });
+  }
+
+  async showToast() {
+    const toast = await this.toasty.create({
+      message: 'An error occurred while getting the latest block information.',
+      duration: 4000
+    });
+    toast.present();
   }
 
   public getCoinsForBlockHash(

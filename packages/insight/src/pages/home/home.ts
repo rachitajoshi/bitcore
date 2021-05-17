@@ -56,6 +56,7 @@ export class HomePage {
           .map(x => x.supported)
           .reduce((agg, arr) => [...agg].concat(arr), []);
         this.availableNetworks = _.filter(newNetworks, o => o.chain !== 'ALL');
+        this.availableNetworks.sort(this.compare);
       });
     }
     this.priceProvider.setCurrency();
@@ -68,5 +69,19 @@ export class HomePage {
       chain: this.chain,
       network: this.network
     });
+  }
+
+  public compare(a, b) {
+    // ignore character casing
+    const network1 = a.network.toUpperCase();
+    const network2 = b.network.toUpperCase();
+
+    let comparison = 0;
+    if (network1 > network2) {
+      comparison = 1;
+    } else if (network1 < network2) {
+      comparison = -1;
+    }
+    return comparison;
   }
 }

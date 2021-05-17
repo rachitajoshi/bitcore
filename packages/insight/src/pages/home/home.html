@@ -5,7 +5,7 @@
         <h2 class="content-container--heading all-coins">Latest Blocks</h2>
         <ion-grid class="page-content-grid">
             <ion-row>
-                <ion-col col-md-6 col-12 class="page-content" *ngFor="let availableNetwork of availableNetworks">
+                <ion-col col-md-3 col-12 class="page-content" *ngFor="let availableNetwork of availableNetworks">
                     <ion-item class="chain" no-lines>
                         <ion-avatar item-start>
                             <img *ngIf="availableNetwork.network === 'mainnet'" src="assets/img/currency_logos/{{ availableNetwork.chain.toLowerCase() }}.svg" class="logo" />
